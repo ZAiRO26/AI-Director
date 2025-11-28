@@ -13,11 +13,16 @@ const jwt = require('jsonwebtoken');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(require('./auth'));
 const storageDir = path.join(__dirname, 'storage');
 if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
 const upload = multer({ dest: storageDir });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/metrics', (_req, res) => {
+  const activeSessions = Array.from(sessions.values()).length;
+  res.json({ ok: true, activeSessions });
+});
 app.get('/live/token', (req, res) => {
   const url = process.env.LIVEKIT_URL || '';
   const apiKey = process.env.LIVEKIT_API_KEY || '';
@@ -82,6 +87,7 @@ io.on('connection', (socket) => {
 
     // Make a switch decision
     const now = Date.now();
+    if (now - lastSwitchAt < 800) return;
     const decision = chooseActiveCamera({
       scores: room,
       lastActive,
