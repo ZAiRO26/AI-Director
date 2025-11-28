@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import LocalStreamProcessor from '@/components/LocalStreamProcessor';
 import { getSocket } from '@/lib/socket';
+import ProgramMixer from '@/components/ProgramMixer';
 
 type MediaDevice = MediaDeviceInfo;
 
@@ -13,6 +14,7 @@ export default function MultiCamConsole() {
     { camId: 'cam_2' },
   ]);
   const [activeCam, setActiveCam] = useState<string>('cam_1');
+  const [streams, setStreams] = useState<Record<string, MediaStream | undefined>>({});
 
   useEffect(() => {
     async function enumerate() {
@@ -83,9 +85,20 @@ export default function MultiCamConsole() {
                 Cut to {s.camId}
               </button>
             </div>
-            <LocalStreamProcessor camId={s.camId} videoDeviceId={s.v} audioDeviceId={s.a} isProgram={activeCam === s.camId} />
+            <LocalStreamProcessor camId={s.camId} videoDeviceId={s.v} audioDeviceId={s.a} isProgram={activeCam === s.camId} onStream={(st) => setStreams((m) => ({ ...m, [s.camId]: st }))} />
           </div>
         ))}
+      </div>
+
+      <div className="mt-6">
+        <ProgramMixer
+          stream={streams[activeCam]}
+          onRecording={async (blob) => {
+            const fd = new FormData();
+            fd.append('file', blob, 'program.webm');
+            await fetch('http://localhost:4000/upload', { method: 'POST', body: fd });
+          }}
+        />
       </div>
 
       <div className="mt-4 p-3 bg-zinc-800/40 rounded text-sm text-gray-300">

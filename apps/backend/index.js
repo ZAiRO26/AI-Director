@@ -3,12 +3,21 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { chooseActiveCamera } = require('../../packages/decision-engine');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+const storageDir = path.join(__dirname, 'storage');
+if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+const upload = multer({ dest: storageDir });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.post('/upload', upload.single('file'), (req, res) => {
+  res.json({ ok: true, file: req.file?.filename || null });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {

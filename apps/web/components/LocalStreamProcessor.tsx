@@ -8,9 +8,10 @@ type Props = {
   videoDeviceId?: string;
   audioDeviceId?: string;
   isProgram?: boolean;
+  onStream?: (stream: MediaStream) => void;
 };
 
-export default function LocalStreamProcessor({ camId, videoDeviceId, audioDeviceId, isProgram }: Props) {
+export default function LocalStreamProcessor({ camId, videoDeviceId, audioDeviceId, isProgram, onStream }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export default function LocalStreamProcessor({ camId, videoDeviceId, audioDevice
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+        if (onStream) onStream(stream);
 
         // Initialize Hark for VAD
         // threshold: -50dB is a reasonable default for speech
