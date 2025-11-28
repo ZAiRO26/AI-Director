@@ -40,12 +40,14 @@ export default function LocalStreamProcessor({ camId, videoDeviceId, audioDevice
           setIsSpeaking(true);
           const socket = getSocket();
           socket.emit('metadata', { camId, vad: 1, motion: 0 });
+          socket.emit('event', { type: 'speaking_start', camId });
         });
 
         speechEvents.on('stopped_speaking', () => {
           setIsSpeaking(false);
            const socket = getSocket();
            socket.emit('metadata', { camId, vad: 0, motion: 0 });
+           socket.emit('event', { type: 'speaking_stop', camId });
         });
 
       } catch (err: any) {
