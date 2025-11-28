@@ -4,6 +4,7 @@ import LocalStreamProcessor from '@/components/LocalStreamProcessor';
 import { getSocket } from '@/lib/socket';
 import ProgramMixer from '@/components/ProgramMixer';
 import { joinLiveKit, publishActive } from '@/lib/livekit';
+import DeliveryPanel from '@/components/DeliveryPanel';
 
 type MediaDevice = MediaDeviceInfo;
 
@@ -18,6 +19,7 @@ export default function MultiCamConsole() {
   const [streams, setStreams] = useState<Record<string, MediaStream | undefined>>({});
   const [recording, setRecording] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const recorders = React.useRef<Record<string, MediaRecorder | undefined>>({});
   const chunks = React.useRef<Record<string, Blob[]>>({});
 
@@ -97,6 +99,7 @@ export default function MultiCamConsole() {
                   const socket = getSocket();
                   socket.emit('event', { sessionId: sid, type: 'record_stop' });
                   await fetch('http://localhost:4000/session/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roomId: 'default' }) });
+                  setLastSessionId(sid);
                 }
                 setSessionId(null);
               }
@@ -106,6 +109,10 @@ export default function MultiCamConsole() {
           </button>
         </div>
       </div>
+
+      {lastSessionId && (
+        <DeliveryPanel sessionId={lastSessionId} />
+      )}
 
       <div className="grid grid-cols-2 gap-6">
         {selected.map((s, idx) => (

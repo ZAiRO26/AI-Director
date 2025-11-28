@@ -9,6 +9,7 @@ const fs = require('fs');
 const { AccessToken } = require('livekit-server-sdk');
 const { RoomServiceClient } = require('livekit-server-sdk');
 const jwt = require('jsonwebtoken');
+const s3 = require('./storage/s3');
 
 const app = express();
 app.use(cors());
@@ -37,11 +38,20 @@ app.get('/live/token', (req, res) => {
 });
 app.get('/assets/:sessionId', (req, res) => {
   const sid = req.params.sessionId;
-  const dir = ensureSessionDir(sid);
-  if (!fs.existsSync(dir)) return res.status(404).json({ ok: false });
-  const files = fs.readdirSync(dir).filter(Boolean);
-  const out = files.map((f) => ({ name: f, url: `/download/${sid}/${encodeURIComponent(f)}` }));
-  res.json({ ok: true, files: out });
+  if (s3.enabled()) {
+    const manifestPath = path.join(storageDir, 'sessions', sid, 'manifest.json');
+    let files = [];
+    if (fs.existsSync(manifestPath)) {
+      try { files = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')).files || []; } catch {}
+    }
+    Promise.all(files.map(async (f) => ({ name: f, url: await s3.signedUrl(sid, f) }))).then((out) => res.json({ ok: true, files: out })).catch(() => res.status(500).json({ ok: false }));
+  } else {
+    const dir = ensureSessionDir(sid);
+    if (!fs.existsSync(dir)) return res.status(404).json({ ok: false });
+    const files = fs.readdirSync(dir).filter(Boolean);
+    const out = files.map((f) => ({ name: f, url: `/download/${sid}/${encodeURIComponent(f)}` }));
+    res.json({ ok: true, files: out });
+  }
 });
 app.get('/download/:sessionId/:name', (req, res) => {
   const sid = req.params.sessionId;
@@ -52,7 +62,20 @@ app.get('/download/:sessionId/:name', (req, res) => {
   res.sendFile(file);
 });
 app.post('/upload', upload.single('file'), (req, res) => {
-  res.json({ ok: true, file: req.file?.filename || null });
+  const sid = req.body?.sessionId;
+  const name = req.body?.name || req.file?.originalname || req.file?.filename;
+  if (!sid || !name || !req.file) return res.status(400).json({ ok: false });
+  const dir = ensureSessionDir(sid);
+  const target = path.join(dir, name);
+  fs.renameSync(req.file.path, target);
+  if (s3.enabled()) {
+    s3.uploadFile(sid, name, target).then(() => {
+      try { fs.unlinkSync(target); } catch {}
+      res.json({ ok: true, file: `s3:sessions/${sid}/${name}` });
+    }).catch(() => res.status(500).json({ ok: false }));
+  } else {
+    res.json({ ok: true, file: target });
+  }
 });
 
 const server = http.createServer(app);
@@ -155,6 +178,13 @@ app.post('/session/stop', (req, res) => {
   fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ events }, null, 2));
   const manifest = { sessionId: sid, files: fs.readdirSync(dir).filter(Boolean) };
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  if (s3.enabled()) {
+    s3.moveLocalSession(dir, sid).then(() => {
+      sessions.delete(roomId);
+      res.json({ ok: true, sessionId: sid });
+    }).catch(() => res.status(500).json({ ok: false }));
+    return;
+  }
   sessions.delete(roomId);
   res.json({ ok: true, sessionId: sid });
 });
